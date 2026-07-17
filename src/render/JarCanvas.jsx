@@ -1,35 +1,70 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { startLoop } from "../sim/loop.js";
-import { World } from "../sim/engine.js";
 import { CONFIG } from "../sim/config.js";
-import { drawJar, CANVAS_W, CANVAS_H } from "./drawJar.js";
+import { plantSeed } from "../sim/plants.js";
+import { drawJar, colAt, PIX_W, PIX_H, SCALE } from "./drawJar.js";
 
-export default function JarCanvas() {
+export default function JarCanvas({ world, tool, seedType }) {
   const canvasRef = useRef(null);
-  const worldRef = useRef(null);
-  if (!worldRef.current) worldRef.current = new World(CONFIG);
+  const hoverRef = useRef(-1);
+  const [cursor, setCursor] = useState("default");
+
+  // Refs mirror the current tool/seed so the render loop can read them without
+  // being torn down and restarted every time the selection changes.
+  const toolRef = useRef(tool);
+  const seedRef = useRef(seedType);
+  toolRef.current = tool;
+  seedRef.current = seedType;
 
   useEffect(() => {
     const ctx = canvasRef.current.getContext("2d");
-    const world = worldRef.current;
-    let fps = 0;
+    ctx.imageSmoothingEnabled = false;
 
     const stop = startLoop({
       tickSeconds: CONFIG.TICK_SECONDS,
       onTick: (dt) => world.tick(dt),
-      onRender: (dt) => {
-        if (dt > 0) fps = 0.9 * fps + 0.1 / dt;
+      onRender: () =>
         drawJar(ctx, {
-          fps,
+          world,
           sun: world.sun,
-          day: world.day,
-          timeOfDay: world.timeOfDay,
-          humidity: world.humidity,
-        });
-      },
+          hoverCol: hoverRef.current,
+          tool: toolRef.current,
+        }),
     });
     return stop;
-  }, []);
+  }, [world]);
 
-  return <canvas ref={canvasRef} width={CANVAS_W} height={CANVAS_H} />;
+  function colFromEvent(e) {
+    const r = canvasRef.current.getBoundingClientRect();
+    return colAt(e.clientX - r.left, e.clientY - r.top);
+  }
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={PIX_W}
+      height={PIX_H}
+      style={{
+        width: PIX_W * SCALE,
+        height: PIX_H * SCALE,
+        border: "1px solid var(--line)",
+        borderRadius: 6,
+        cursor,
+      }}
+      onMouseMove={(e) => {
+        const c = colFromEvent(e);
+        hoverRef.current = c;
+        setCursor(c >= 0 ? "pointer" : "default");
+      }}
+      onMouseLeave={() => {
+        hoverRef.current = -1;
+      }}
+      onClick={(e) => {
+        const c = colFromEvent(e);
+        if (c < 0) return;
+        if (toolRef.current === "water") world.addWater(c);
+        else plantSeed(world, c, seedRef.current);
+      }}
+    />
+  );
 }
