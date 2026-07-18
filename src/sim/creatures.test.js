@@ -12,7 +12,7 @@ const run = (w, s) => { for (let t = 0; t < s; t += DT) w.tick(DT); };
 {
   const w = new World();
   plantSeed(w, 12, "fern");
-  w.addWater(12, 0.6);
+  w.addWater(12, 0.6, true);
   run(w, CONFIG.DAY_LENGTH * 0.6);              // let it sprout
   spawnBug(w, 2);
   const start = w.bugs[0].col;
@@ -29,7 +29,7 @@ const run = (w, s) => { for (let t = 0; t < s; t += DT) w.tick(DT); };
 // 2. a fed bug breeds; the population is capped
 {
   const w = new World();
-  for (let c = 1; c < 15; c += 2) { plantSeed(w, c, "fern"); w.addWater(c, 0.8); }
+  for (let c = 1; c < 15; c += 2) { plantSeed(w, c, "fern"); w.addWater(c, 0.8, true); }
   run(w, CONFIG.DAY_LENGTH * 0.7);
   spawnBug(w, 7, 0.9);
   run(w, CONFIG.DAY_LENGTH * 3);
@@ -96,7 +96,7 @@ const run = (w, s) => { for (let t = 0; t < s; t += DT) w.tick(DT); };
 // 7. the whole loop runs for 30 days without blowing up
 {
   const w = new World();
-  for (let c = 2; c < 15; c += 3) { plantSeed(w, c, "fern"); w.addWater(c, 0.7); }
+  for (let c = 2; c < 15; c += 3) { plantSeed(w, c, "fern"); w.addWater(c, 0.7, true); }
   spawnBug(w, 5); spawnBug(w, 10);
   run(w, CONFIG.DAY_LENGTH * 30);
   console.log(`after 30 days: ${w.entities.length} plants, ${w.bugs.length} bugs`);
@@ -114,7 +114,7 @@ const run = (w, s) => { for (let t = 0; t < s; t += DT) w.tick(DT); };
 //  jar forever. Grazing — leaving a plant at BUG_LEAVE_HEALTH — is what fixed it.)
 {
   const w = new World();
-  for (let c = 1; c < 15; c += 2) { plantSeed(w, c, "fern"); w.addWater(c, 0.8); }
+  for (let c = 1; c < 15; c += 2) { plantSeed(w, c, "fern"); w.addWater(c, 0.8, true); }
   run(w, CONFIG.DAY_LENGTH * 0.7);
   spawnBug(w, 7, 0.9);
   let minPlants = Infinity, maxPlants = 0;

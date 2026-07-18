@@ -8,11 +8,15 @@
       :root { --ink: #1d2530; --muted: #7c8794; --line: #e3e7ec; --accent: #3f9a5a; }
       * { box-sizing: border-box; }
       body {
-        margin: 0; background: #ffffff; color: var(--ink); min-height: 100vh;
+        margin: 0; background: radial-gradient(ellipse at 50% 0%, #ffffff 0%, #f7f9fb 70%); color: var(--ink); min-height: 100vh;
         font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
         display: flex; align-items: center; justify-content: center;
       }
       canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+      button { transition: all .15s cubic-bezier(.2,.8,.3,1); }
+      button:active:not(:disabled) { transform: scale(0.96) !important; }
+      @keyframes fade { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+      ::selection { background: rgba(63,154,90,0.2); }
     </style>
   </head>
   <body>

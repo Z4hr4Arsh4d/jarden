@@ -4,6 +4,8 @@
 import { CONFIG } from "./config.js";
 import { tickPlants } from "./plants.js";
 import { tickCreatures } from "./creatures.js";
+import { initWeather, tickWeather } from "./weather.js";
+import { initScore, tickScore, spend } from "./score.js";
 
 /** Small, fast, seedable RNG (mulberry32) so runs are reproducible. */
 export function mulberry32(seed) {
@@ -25,8 +27,14 @@ export class World {
     this.humidity = 0;                   // water currently in the air (evaporated)
     this.lampT = 0;                      // sunlamp seconds remaining
     this._rand = mulberry32(cfg.SEED);
+    // rand gets passed around as a value (to weather, genetics...), so bind it once
+    // rather than leaving every call site to remember `this`.
+    this.rand = this.rand.bind(this);
     this.entities = [];                  // plants
     this.bugs = [];                      // creatures (M3)
+    this.preds = [];                     // predators (M4)
+    initWeather(this);
+    initScore(this);
 
     this.cells = [];
     for (let y = 0; y < this.rows; y++) {
@@ -52,23 +60,30 @@ export class World {
     return Math.max(0, Math.sin(Math.PI * (t - 0.25) / 0.5));
   }
 
-  /** Effective light: the sun, plus the sunlamp if it's on (works at night too). */
+  /** Effective light: the sun (bent by the weather), plus the sunlamp if it's on. */
   get sun() {
     const boost = this.lampT > 0 ? this.cfg.LAMP_ADD : 0;
-    return Math.min(1, this.baseSun + boost);
+    return Math.min(1, this.baseSun * this.weather.light + boost);
   }
 
   // ---- player tools: the hand reaching into the jar (external inputs) ----
-  sunlamp() { this.lampT = this.cfg.LAMP_SECONDS; }
+  // Each costs tending energy, so you can't simply spam the jar into perfection.
+  sunlamp() {
+    if (!spend(this, this.cfg.COST_LAMP)) return false;
+    this.lampT = this.cfg.LAMP_SECONDS;
+    return true;
+  }
 
   /** Pour water onto a column's surface soil (spills a little onto the neighbours). */
-  addWater(col, amount = this.cfg.WATER_POUR) {
+  addWater(col, amount = this.cfg.WATER_POUR, free = false) {
+    if (!free && !spend(this, this.cfg.COST_WATER)) return false;
     const y = this.rows - this.cfg.SOIL_ROWS;
     for (const [c, share] of [[col, 0.6], [col - 1, 0.2], [col + 1, 0.2]]) {
       if (c < 0 || c >= this.cols) continue;
       const cell = this.cellAt(c, y);
       cell.water = Math.min(this.cfg.WATER_MAX, cell.water + amount * share);
     }
+    return true;
   }
 
   // ---- grid ----
@@ -126,6 +141,7 @@ export class World {
   tick(dt) {
     this.time += dt;
     if (this.lampT > 0) this.lampT = Math.max(0, this.lampT - dt);
+    tickWeather(this, dt);
     const cfg = this.cfg;
     const sun = this.sun;
 
@@ -133,7 +149,7 @@ export class World {
     // Deep soil is sheltered: it holds its moisture, which is what keeps roots alive.
     let evaporated = 0;
     for (const cell of this.cells) {
-      const e = Math.min(cell.water, cfg.EVAP_RATE * sun * this.exposureAt(cell.y) * dt);
+      const e = Math.min(cell.water, cfg.EVAP_RATE * this.weather.evap * sun * this.exposureAt(cell.y) * dt);
       cell.water -= e;
       evaporated += e;
 
@@ -147,7 +163,7 @@ export class World {
     // Night: the air is cool, humidity condenses back onto every surface as dew.
     if (sun < 0.05 && this.humidity > 0) {
       const per = Math.min(
-        cfg.DEW_RATE * dt,
+        cfg.DEW_RATE * this.weather.dew * dt,
         this.humidity / this.cells.length
       );
       let condensed = 0;
@@ -166,5 +182,6 @@ export class World {
     // life takes its turn
     tickPlants(this, dt);
     tickCreatures(this, dt);
+    tickScore(this, dt);
   }
 }

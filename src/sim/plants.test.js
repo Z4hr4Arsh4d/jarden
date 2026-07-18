@@ -1,17 +1,20 @@
 // Run with: node src/sim/plants.test.js
 import { World } from "./engine.js";
-import { CONFIG, PLANT_TYPES } from "./config.js";
+import { CONFIG, PLANT_TYPES, WEATHER } from "./config.js";
 import { plantSeed, rootCell } from "./plants.js";
 import assert from "node:assert";
 
 const DT = CONFIG.TICK_SECONDS;
 const run = (w, seconds) => { for (let t = 0; t < seconds; t += DT) w.tick(DT); };
+/** Pin the weather so a test isolates biology from the weather system. */
+const pinClear = (w) => { w.weather = WEATHER.clear; w.weatherT = Infinity; };
 
 // 1. a watered seed grows through its stages to maturity, then dies of old age
 {
   const w = new World();
+  pinClear(w);
   assert(plantSeed(w, 8, "sprout"));
-  w.addWater(8, 0.6);
+  w.addWater(8, 0.6, true);
   run(w, CONFIG.DAY_LENGTH * 1.6);                   // mid-life: grown, not yet old
   const p = w.entities[0];
   console.log(`growth: stage=${p.stage} at 1.6 days (lifespan ${PLANT_TYPES.sprout.lifeDays} days)`);
@@ -37,8 +40,9 @@ const run = (w, seconds) => { for (let t = 0; t < seconds; t += DT) w.tick(DT); 
 // 3. darkness stalls growth (a sprout can't photosynthesise at night)
 {
   const w = new World();
+  pinClear(w);
   plantSeed(w, 8, "sprout");
-  w.addWater(8, 0.6);
+  w.addWater(8, 0.6, true);
   run(w, CONFIG.DAY_LENGTH * 0.20);                 // pre-dawn only: still dark
   const nightStage = w.entities[0].stage;
   run(w, CONFIG.DAY_LENGTH * 0.35);                 // through the morning sun
@@ -49,11 +53,15 @@ const run = (w, seconds) => { for (let t = 0; t < seconds; t += DT) w.tick(DT); 
 }
 
 // 4. mature plants spread: one seed becomes a patch
+// (weather pinned + kept watered, so this tests spreading and nothing else)
 {
   const w = new World();
+  pinClear(w);
   plantSeed(w, 8, "bloom");
-  w.addWater(8, 0.6);
-  run(w, CONFIG.DAY_LENGTH * 4);
+  for (let d = 0; d < 4; d++) {
+    w.addWater(8, 0.8, true);
+    run(w, CONFIG.DAY_LENGTH);
+  }
   console.log(`spread: ${w.entities.length} plants from 1 seed`);
   assert(w.entities.length >= 2, "a mature bloom should have dropped a seed by now");
 }
@@ -62,8 +70,9 @@ const run = (w, seconds) => { for (let t = 0; t < seconds; t += DT) w.tick(DT); 
 // (Track the original plant by id — by the time it dies it may have had children.)
 {
   const w = new World();
+  pinClear(w);
   plantSeed(w, 8, "sprout");                        // short-lived on purpose
-  w.addWater(8, 0.6);
+  w.addWater(8, 0.6, true);
   const id = w.entities[0].id;
   let recycled = false;
   for (let t = 0; t < CONFIG.DAY_LENGTH * PLANT_TYPES.sprout.lifeDays * 2; t += DT) {
@@ -84,7 +93,7 @@ const run = (w, seconds) => { for (let t = 0; t < seconds; t += DT) w.tick(DT); 
 {
   const w = new World();
   plantSeed(w, 4, "fern"); plantSeed(w, 8, "sprout"); plantSeed(w, 12, "bloom");
-  w.addWater(4, 0.6); w.addWater(8, 0.6); w.addWater(12, 0.6);
+  w.addWater(4, 0.6, true); w.addWater(8, 0.6, true); w.addWater(12, 0.6, true);
   run(w, CONFIG.DAY_LENGTH * 15);
   console.log(`after 15 days: ${w.entities.length} plants (cap ${CONFIG.MAX_PLANTS})`);
   assert(w.entities.length <= CONFIG.MAX_PLANTS);
@@ -102,7 +111,7 @@ const run = (w, seconds) => { for (let t = 0; t < seconds; t += DT) w.tick(DT); 
   assert(w.sun > 0.5, "the lamp should light the night");
   const soil = rootCell(w, 8);
   const before = soil.water;
-  w.addWater(8);
+  w.addWater(8, CONFIG.WATER_POUR, true);
   console.log(`tools: lamp night-light=${w.sun.toFixed(2)}, pour ${before.toFixed(2)} -> ${soil.water.toFixed(2)}`);
   assert(soil.water > before);
 }

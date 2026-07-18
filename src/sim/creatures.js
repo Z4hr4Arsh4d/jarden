@@ -8,7 +8,7 @@
 // Dead things become `detritus` in the soil; mould converts detritus into nutrients
 // (slowly on its own, much faster where mould takes hold).
 
-import { CONFIG, PLANT_TYPES } from "./config.js";
+import { CONFIG } from "./config.js";
 import { rootCell } from "./plants.js";
 
 let nextId = 10000;
@@ -25,7 +25,7 @@ export function spawnBug(world, col, energy = 0.6) {
     id: nextId++, kind: "bug",
     col: Math.max(0, Math.min(world.cols - 1, col)),
     energy, age: 0, dir: world.rand() < 0.5 ? -1 : 1,
-    eating: false, blink: world.rand() * 4, breedT: 0, hearts: 0,
+    eating: false, fleeing: false, blink: world.rand() * 4, breedT: 0, hearts: 0,
   });
   return true;
 }
@@ -56,6 +56,28 @@ function tickBugs(world, dt) {
     b.blink += dt;
     b.energy -= cfg.BUG_METABOLISM * dt;
     b.eating = false;
+
+    // a predator nearby overrides everything: run.
+    // Only a *hunting* predator is a threat. A resting one gives bugs the window they
+    // need to eat and breed — without that window predation always outruns birth.
+    let threat = null, threatD = Infinity;
+    for (const p of world.preds) {
+      if (!p.hunting) continue;
+      const d = Math.abs(p.col - b.col);
+      if (d < threatD) { threatD = d; threat = p; }
+    }
+    if (threat && threatD < cfg.BUG_FLEE_RANGE) {
+      b.fleeing = true;
+      let away = Math.sign(b.col - threat.col) || (world.rand() < 0.5 ? -1 : 1);
+      // Cornered against the glass? Dodge PAST the predator instead of squashing into
+      // the wall. Without this, every chase ends at a wall and bugs go extinct on day 1.
+      const cornered = (away < 0 && b.col < 1.2) || (away > 0 && b.col > world.cols - 2.2);
+      if (cornered) away = -away;
+      b.dir = away;
+      b.col = Math.max(0, Math.min(world.cols - 1, b.col + away * cfg.BUG_FLEE_SPEED * dt));
+      continue;                                       // no eating, no breeding while running
+    }
+    b.fleeing = false;
 
     const food = nearestFood(world, b.col);
     if (food) {
@@ -139,7 +161,92 @@ function tickMould(world, dt) {
   for (const n of spread) n.mould = Math.max(n.mould, 0.2);
 }
 
+// ---------------------------------------------------------------- predators (M4)
+// The third trophic level. Unlike bugs, predators DO kill what they eat — that's the
+// point of them: they're the pressure that stops a bug boom from stripping the jar.
+
+export function spawnPred(world, col, energy = 0.7) {
+  if (world.preds.length >= CONFIG.MAX_PREDS) return false;
+  world.preds.push({
+    id: nextId++, kind: "pred",
+    col: Math.max(0, Math.min(world.cols - 1, col)),
+    energy, age: 0, dir: world.rand() < 0.5 ? -1 : 1,
+    hunting: false, blink: world.rand() * 4, breedT: 0, hearts: 0, pounce: 0,
+  });
+  return true;
+}
+
+function nearestBug(world, col) {
+  let best = null, bestD = Infinity;
+  for (const b of world.bugs) {
+    const d = Math.abs(b.col - col);
+    if (d < bestD) { bestD = d; best = b; }
+  }
+  return best;
+}
+
+function tickPreds(world, dt) {
+  const cfg = world.cfg;
+  const born = [];
+
+  for (const p of world.preds) {
+    p.age += dt;
+    p.blink += dt;
+    p.energy -= cfg.PRED_METABOLISM * dt;
+    p.hunting = false;
+    if (p.pounce > 0) p.pounce -= dt;
+    if (p.hearts > 0) p.hearts -= dt;
+    if (p.breedT > 0) p.breedT -= dt;
+
+    // A full predator doesn't hunt. Without this they eat every last bug and then
+    // starve — the same collapse the grazing rule fixed one level down.
+    const hungry = p.energy < cfg.PRED_HUNT_BELOW;
+    const prey = hungry ? nearestBug(world, p.col) : null;
+    if (prey) {
+      p.hunting = true;
+      const gap = prey.col - p.col;
+      if (Math.abs(gap) > cfg.PRED_CATCH) {
+        p.dir = Math.sign(gap);
+        p.col += p.dir * cfg.PRED_SPEED * dt;
+      } else if (world.rand() < cfg.PRED_CATCH_RATE * dt) {
+        // caught it. Predators kill — this is the pressure that balances the jar.
+        // The catch is a roll, not a certainty: guaranteed kills wipe the bugs out.
+        const i = world.bugs.indexOf(prey);
+        if (i >= 0) {
+          world.bugs.splice(i, 1);
+          addDetritus(world, prey.col, cfg.BUG_DETRITUS * 0.5);   // leftovers rot
+          p.energy = Math.min(1, p.energy + cfg.PRED_FEED);
+          p.pounce = 0.4;
+        }
+      }
+    } else {
+      p.col += p.dir * cfg.PRED_SPEED * 0.3 * dt;
+      if (p.col < 0.5 || p.col > world.cols - 1.5) p.dir *= -1;
+    }
+    p.col = Math.max(0, Math.min(world.cols - 1, p.col));
+
+    if (p.age > cfg.PRED_MATURITY && p.energy >= cfg.PRED_BREED_ENERGY && p.breedT <= 0 &&
+        world.bugs.length >= cfg.PRED_PREY_TO_BREED &&        // don't breed onto a dwindling food supply
+        world.preds.length + born.length < cfg.MAX_PREDS) {
+      p.energy -= cfg.PRED_BREED_COST;
+      p.breedT = cfg.PRED_BREED_COOLDOWN;
+      p.hearts = 1.2;
+      born.push(p.col + (world.rand() < 0.5 ? -1 : 1));
+    }
+  }
+
+  for (let i = world.preds.length - 1; i >= 0; i--) {
+    const p = world.preds[i];
+    if (p.energy <= 0 || p.age > cfg.PRED_LIFE) {
+      addDetritus(world, p.col, cfg.PRED_DETRITUS);
+      world.preds.splice(i, 1);
+    }
+  }
+  for (const col of born) spawnPred(world, col, 0.5);
+}
+
 export function tickCreatures(world, dt) {
   tickBugs(world, dt);
+  tickPreds(world, dt);
   tickMould(world, dt);
 }

@@ -5,10 +5,11 @@
 // nutrients to the soil when they die.
 
 import { CONFIG, PLANT_TYPES } from "./config.js";
+import { baseGenes, inherit } from "./genetics.js";
 
 let nextId = 1;
 
-export function plantSeed(world, col, typeKey) {
+export function plantSeed(world, col, typeKey, genes = null) {
   const type = PLANT_TYPES[typeKey];
   if (!type) return false;
   if (col < 0 || col >= world.cols) return false;
@@ -18,6 +19,8 @@ export function plantSeed(world, col, typeKey) {
     id: nextId++, kind: "plant", type: typeKey, col,
     stage: "seed", age: 0, progress: 0, health: 1,
     starve: 0, witherT: 0, seedT: 0, consumedN: 0, bitten: 0,
+    genes: genes || baseGenes(world.rand),
+    gen: genes ? 1 : 0,                 // generation counter, bumped on inheritance
   });
   return true;
 }
@@ -89,18 +92,22 @@ export function tickPlants(world, dt) {
 
     // Night = dormancy, not danger. A plant only starves when it WANTS to grow
     // (there's light) but finds no water — daytime drought. Darkness just pauses it.
-    const wantsLight = light >= type.lightNeed;
+    // genes bend this individual's needs away from its species baseline
+    const g = p.genes;
+    const needLight = type.lightNeed * g.shade;
+    const useWater = type.waterUse * g.thirst;
+    const wantsLight = light >= needLight;
     const hasWater = columnWater(roots) > 0.02;
     if (!wantsLight) {
       // dormant: no growth, no drinking, no starving
     } else if (!hasWater) {
-      p.starve += dt;
+      p.starve += dt / g.hardy;                    // hardy plants hold out longer
       if (p.starve > cfg.STARVE_TIME) p.stage = "wither";
     } else {
       p.starve = Math.max(0, p.starve - dt);
 
       // drink from the whole root column -> the air (transpiration keeps the jar sealed)
-      const drink = drinkColumn(roots, type.waterUse * dt);
+      const drink = drinkColumn(roots, useWater * dt);
       world.humidity += drink;
 
       // eat nutrients (remembered, and returned to the soil on death)
@@ -114,7 +121,7 @@ export function tickPlants(world, dt) {
       }
 
       if (p.stage !== "mature") {
-        p.progress += dt / (type.growDays * cfg.DAY_LENGTH * 0.5);   // half a growDay per stage
+        p.progress += (dt * g.grow) / (type.growDays * cfg.DAY_LENGTH * 0.5);  // half a growDay per stage
         if (p.progress >= 1) {
           p.progress = 0;
           p.stage = p.stage === "sprout" ? "grow" : "mature";
@@ -130,7 +137,7 @@ export function tickPlants(world, dt) {
         if (world.rand() < type.spreadChance) {
           const off = world.rand() < 0.5 ? -1 : 1;
           const target = p.col + off * (1 + Math.floor(world.rand() * 2));
-          spawn.push([target, p.type]);
+          spawn.push([target, p.type, inherit(p.genes, world.rand), (p.gen || 0) + 1]);
         }
       }
     }
@@ -148,5 +155,9 @@ export function tickPlants(world, dt) {
     }
   }
 
-  for (const [col, type] of spawn) plantSeed(world, col, type);
+  for (const [col, type, genes, gen] of spawn) {
+    if (plantSeed(world, col, type, genes)) {
+      world.entities[world.entities.length - 1].gen = gen;
+    }
+  }
 }

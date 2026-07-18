@@ -35,6 +35,12 @@ const C = {
   heart: "#ff8fb1", sparkle: "#fff6a8",
   shadow: "#f0e9e2",
   cheek: "#ffc9d4",
+  glassEdge: "#a9c6d8", glassDeep: "#8fb3c9", glassSheen: "#ffffff",
+  rimTop: "#dceaf3", rimInner: "#7e9cb2", ao: "rgba(60,80,100,0.16)",
+  baseShadow: "rgba(90,110,130,0.13)",
+  pred: "#b39ddb", predDark: "#8a6fc4", predLeg: "#7a5fb0", predEye: "#2f2440",
+  weatherTint: { clear: null, overcast: "rgba(160,170,190,0.18)", heat: "rgba(255,150,90,0.14)",
+                 cold: "rgba(150,200,255,0.16)", humid: "rgba(190,215,205,0.14)" },
 };
 
 function px(ctx, x, y, w, h, color) {
@@ -96,6 +102,9 @@ function drawBug(ctx, b, t) {
   const x = Math.round(JAR_X + b.col * CELL + 1);
   const bob = Math.round(Math.sin(t * 6 + b.col) * 0.5);   // a happy little bounce
   const y = SOIL_Y - 4 + bob;
+  // a contact shadow that shrinks as it bounces — grounds it in the jar
+  ctx.fillStyle = `rgba(60,40,20,${0.22 - bob * 0.06})`;
+  ctx.fillRect(x, SOIL_Y, 4, 1);
 
   // antennae
   px(ctx, x, y - 2, 1, 1, C.bugDark);
@@ -126,6 +135,66 @@ function drawBug(ctx, b, t) {
     px(ctx, x + 3, hy, 1, 1, C.heart);
     px(ctx, x + 1, hy + 1, 3, 1, C.heart);
     px(ctx, x + 2, hy + 2, 1, 1, C.heart);
+  }
+}
+
+function drawPred(ctx, p, t) {
+  const x = Math.round(JAR_X + p.col * CELL);
+  const scuttle = Math.round(Math.sin(t * 9 + p.col) * 0.5);
+  const y = SOIL_Y - 5 + (p.pounce > 0 ? -1 : 0);
+  ctx.fillStyle = "rgba(60,40,20,0.20)";
+  ctx.fillRect(x, SOIL_Y, 5, 1);
+
+  // legs (they scuttle)
+  for (const dx of [-1, 5]) {
+    px(ctx, x + dx, y + 1 + scuttle, 1, 1, C.predLeg);
+    px(ctx, x + dx, y + 3 - scuttle, 1, 1, C.predLeg);
+  }
+  // rounded body
+  px(ctx, x, y, 5, 4, C.pred);
+  px(ctx, x + 1, y - 1, 3, 1, C.pred);
+  px(ctx, x, y + 3, 5, 1, C.predDark);
+  px(ctx, x + 1, y, 1, 1, "#e8dcff");
+  // big eyes, blinking
+  const blink = (p.blink % 4.5) < 0.13;
+  if (!blink) {
+    px(ctx, x + 1, y + 1, 1, 1, C.predEye);
+    px(ctx, x + 3, y + 1, 1, 1, C.predEye);
+  } else {
+    px(ctx, x + 1, y + 1, 3, 1, C.predDark);
+  }
+  if (p.hunting && Math.floor(t * 6) % 2 === 0) px(ctx, x + 2, y - 3, 1, 1, "#ff9ec4");
+  if (p.hearts > 0) {
+    const hy = y - 5 - Math.round((1.2 - p.hearts) * 3);
+    px(ctx, x + 1, hy, 1, 1, C.heart); px(ctx, x + 3, hy, 1, 1, C.heart);
+    px(ctx, x + 1, hy + 1, 3, 1, C.heart); px(ctx, x + 2, hy + 2, 1, 1, C.heart);
+  }
+}
+
+function drawWeatherFx(ctx, world, t) {
+  const key = world.weather.key;
+  const tint = C.weatherTint[key];
+  if (tint) { ctx.fillStyle = tint; ctx.fillRect(JAR_X, JAR_Y, JAR_W, JAR_H); }
+
+  if (key === "cold") {                                  // drifting flecks of frost
+    for (let i = 0; i < 10; i++) {
+      const fx = JAR_X + ((i * 13 + Math.floor(t * 3)) % JAR_W);
+      const fy = JAR_Y + ((i * 23 + Math.floor(t * 9 + i * 5)) % (JAR_H - 20));
+      px(ctx, fx, fy, 1, 1, "#eaf6ff");
+    }
+  } else if (key === "heat") {                            // heat shimmer rising
+    for (let i = 0; i < 6; i++) {
+      const hx = JAR_X + 5 + ((i * 11) % (JAR_W - 10)) + (Math.floor(t * 4 + i) % 2);
+      const hy = JAR_Y + JAR_H - 24 - ((Math.floor(t * 11) + i * 7) % 26);
+      px(ctx, hx, hy, 1, 1, "rgba(255,190,140,0.75)");
+    }
+  } else if (key === "overcast" || key === "humid") {     // low cloud across the jar's sky
+    for (let i = 0; i < 4; i++) {
+      const cx = JAR_X + ((i * 19 + Math.floor(t * 2)) % (JAR_W + 12)) - 6;
+      const cy = JAR_Y + 6 + (i % 2) * 5;
+      px(ctx, cx, cy, 7, 2, "rgba(255,255,255,0.5)");
+      px(ctx, cx + 2, cy - 1, 4, 1, "rgba(255,255,255,0.4)");
+    }
   }
 }
 
@@ -169,6 +238,10 @@ export function drawJar(ctx, view = {}) {
       const base = wet > 0.66 ? C.soilWet : wet > 0.33 ? C.soilMid : C.soilDry;
       const X = JAR_X + cx * CELL, Y = JAR_Y + cy * CELL;
       px(ctx, X, Y, CELL, CELL, base);
+      // depth: the soil bed darkens as it goes down, so it reads as a volume
+      const depth = (cy - (CONFIG.ROWS - CONFIG.SOIL_ROWS)) / CONFIG.SOIL_ROWS;
+      ctx.fillStyle = `rgba(40,26,14,${(depth * 0.22).toFixed(3)})`;
+      ctx.fillRect(X, Y, CELL, CELL);
       if ((cx + cy) % 3 === 0) px(ctx, X + 1, Y + 1, 1, 1, C.soilWet);
       if ((cx * 2 + cy) % 5 === 0) px(ctx, X + 2, Y + 2, 1, 1, C.soilDry);
 
@@ -189,6 +262,8 @@ export function drawJar(ctx, view = {}) {
     for (const p of world.entities) {
       if (p.kind !== "plant") continue;
       const sway = p.stage === "wither" ? 0 : Math.sin(t * 1.6 + p.col * 0.7) * 0.9;
+      ctx.fillStyle = "rgba(60,40,20,0.18)";
+      ctx.fillRect(JAR_X + p.col * CELL + 1, SOIL_Y, 3, 1);        // roots' contact shadow
       drawSprite(ctx, spriteFor(p), JAR_X + p.col * CELL, SOIL_Y, sway);
 
       // a happy sparkle over healthy mature plants
@@ -200,28 +275,128 @@ export function drawJar(ctx, view = {}) {
         px(ctx, JAR_X + p.col * CELL, SOIL_Y - 3, 1, 1, C.cheek);
       }
     }
-    // --- bugs ---
+    // --- bugs & predators ---
     for (const b of world.bugs) drawBug(ctx, b, t);
+    for (const p of world.preds) drawPred(ctx, p, t);
+    drawWeatherFx(ctx, world, t);
   }
 
-  // --- hover highlight ---
+  // --- hover highlight: a soft column beam, plus a ring around whatever you're pointing at
   if (hoverCol >= 0 && hoverCol < CONFIG.COLS) {
-    ctx.fillStyle = tool === "water" ? "rgba(120,190,240,0.30)" : "rgba(124,196,106,0.30)";
+    const g = ctx.createLinearGradient(0, JAR_Y, 0, JAR_Y + JAR_H);
+    const tint = tool === "water" ? "120,190,240" : tool === "pred" ? "179,157,219"
+               : tool === "bug" ? "255,178,107" : "124,196,106";
+    g.addColorStop(0, `rgba(${tint},0.05)`);
+    g.addColorStop(0.7, `rgba(${tint},0.26)`);
+    g.addColorStop(1, `rgba(${tint},0.34)`);
+    ctx.fillStyle = g;
     ctx.fillRect(JAR_X + hoverCol * CELL, JAR_Y, CELL, JAR_H);
   }
+  if (view.hoverSubject) {
+    const s = view.hoverSubject;
+    const hx = JAR_X + (s.col != null ? s.col * CELL : s.x * CELL) + 2;
+    const hy = s.kind ? SOIL_Y - 5 : JAR_Y + s.y * CELL + 2;
+    ctx.beginPath();
+    ctx.arc(hx, hy, 5 + Math.sin(t * 5) * 0.6, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(255,255,255,0.85)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
 
-  // --- glass, drawn last so it sits over the world ---
-  px(ctx, JAR_X - 2, JAR_Y, 2, JAR_H, C.glass);
-  px(ctx, JAR_X + JAR_W, JAR_Y, 2, JAR_H, C.glass);
-  px(ctx, JAR_X - 2, JAR_Y + JAR_H, JAR_W + 4, 2, C.glass);
-  px(ctx, JAR_X - 1, JAR_Y + 3, 1, JAR_H - 10, C.glassLit);
-  px(ctx, JAR_X - 4, JAR_Y - 4, JAR_W + 8, 4, C.rim);
-  px(ctx, JAR_X - 4, JAR_Y - 4, JAR_W + 8, 1, C.rimLit);
+  // --- the glass: a CYLINDER, not a box ---------------------------------------
+  // Curvature is faked with vertical bands: the world darkens and compresses toward the
+  // left and right edges, the way it does through real curved glass. That plus the
+  // elliptical rim is what sells the jar as a 3D object at this tiny resolution.
+  for (let i = 0; i < 5; i++) {
+    const a = (0.16 - i * 0.03).toFixed(3);
+    ctx.fillStyle = `rgba(70,100,125,${a})`;
+    ctx.fillRect(JAR_X + i, JAR_Y, 1, JAR_H);                    // left curve
+    ctx.fillRect(JAR_X + JAR_W - 1 - i, JAR_Y, 1, JAR_H);        // right curve
+  }
+  // ambient occlusion where the soil meets the glass, and along the shoulders
+  ctx.fillStyle = C.ao;
+  ctx.fillRect(JAR_X, SOIL_Y - 1, JAR_W, 1);
+  ctx.fillRect(JAR_X, JAR_Y, JAR_W, 1);
+
+  // condensation on the inside of the glass
   if (world && world.humidity > 1) {
     ctx.fillStyle = `rgba(255,255,255,${Math.min(0.20, world.humidity / 400)})`;
     ctx.fillRect(JAR_X, JAR_Y, JAR_W, JAR_H);
   }
-  px(ctx, JAR_X - 3, JAR_Y + JAR_H + 2, JAR_W + 6, 2, C.shadow);
+
+  // walls
+  px(ctx, JAR_X - 2, JAR_Y, 2, JAR_H, C.glassEdge);
+  px(ctx, JAR_X + JAR_W, JAR_Y, 2, JAR_H, C.glassEdge);
+  px(ctx, JAR_X - 2, JAR_Y + JAR_H, JAR_W + 4, 2, C.glassDeep);
+
+  // two specular streaks — a bright one near the left edge, a faint one right of centre
+  ctx.fillStyle = "rgba(255,255,255,0.55)";
+  ctx.fillRect(JAR_X + 2, JAR_Y + 5, 1, JAR_H - 16);
+  ctx.fillStyle = "rgba(255,255,255,0.22)";
+  ctx.fillRect(JAR_X + 5, JAR_Y + 9, 1, JAR_H - 26);
+  ctx.fillStyle = "rgba(255,255,255,0.16)";
+  ctx.fillRect(JAR_X + JAR_W - 5, JAR_Y + 7, 1, JAR_H - 20);
+
+  // --- rim: an ELLIPSE, so you're looking slightly down into an open jar ---
+  const cx = JAR_X + JAR_W / 2, ry = 3.2, rx = JAR_W / 2 + 3;
+  ctx.beginPath();
+  ctx.ellipse(cx, JAR_Y - 3, rx, ry + 1.6, 0, 0, Math.PI * 2);
+  ctx.fillStyle = C.rim;
+  ctx.fill();
+  ctx.beginPath();                                                // the opening itself
+  ctx.ellipse(cx, JAR_Y - 3, rx - 2.5, ry, 0, 0, Math.PI * 2);
+  ctx.fillStyle = C.rimInner;
+  ctx.fill();
+  ctx.beginPath();                                                // lit front lip
+  ctx.ellipse(cx, JAR_Y - 4.2, rx - 1, ry, 0, Math.PI * 1.05, Math.PI * 1.95);
+  ctx.strokeStyle = C.rimTop;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // --- the jar sits on something: an elliptical contact shadow ---
+  ctx.beginPath();
+  ctx.ellipse(cx, JAR_Y + JAR_H + 4, JAR_W / 2 + 5, 3.4, 0, 0, Math.PI * 2);
+  ctx.fillStyle = C.baseShadow;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(cx, JAR_Y + JAR_H + 3, JAR_W / 2 - 4, 1.8, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(90,110,130,0.10)";
+  ctx.fill();
+
+  // --- click ripples ---
+  if (view.ripples) {
+    for (const r of view.ripples) {
+      const age = t - r.t;
+      if (age > 0.6) continue;
+      const p = age / 0.6;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, 2 + p * 7, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(${r.c},${(1 - p) * 0.75})`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+}
+
+/** What's under the cursor? Returns a plant, bug, predator, soil cell, or null. */
+export function pickAt(world, cssX, cssY) {
+  if (!world) return null;
+  const x = cssX / SCALE, y = cssY / SCALE;
+  if (x < JAR_X || x >= JAR_X + JAR_W || y < JAR_Y || y >= JAR_Y + JAR_H) return null;
+  const col = Math.floor((x - JAR_X) / CELL);
+
+  // creatures sit on the soil line — check them first, they're what you point at
+  if (Math.abs(y - (SOIL_Y - 3)) < 6) {
+    for (const p of world.preds) if (Math.abs(p.col - col) < 1.2) return p;
+    for (const b of world.bugs) if (Math.abs(b.col - col) < 1.2) return b;
+  }
+  if (y < SOIL_Y) {
+    const plant = world.entities.find((p) => p.col === col && p.kind === "plant");
+    if (plant) return plant;
+    return null;
+  }
+  const row = Math.floor((y - JAR_Y) / CELL);
+  return world.cellAt(col, Math.min(world.rows - 1, row));
 }
 
 /** Screen (CSS) coords -> sim column, or -1 if outside the jar. */
