@@ -3,6 +3,7 @@
 
 import { CONFIG } from "./config.js";
 import { tickPlants } from "./plants.js";
+import { tickCreatures } from "./creatures.js";
 
 /** Small, fast, seedable RNG (mulberry32) so runs are reproducible. */
 export function mulberry32(seed) {
@@ -24,7 +25,8 @@ export class World {
     this.humidity = 0;                   // water currently in the air (evaporated)
     this.lampT = 0;                      // sunlamp seconds remaining
     this._rand = mulberry32(cfg.SEED);
-    this.entities = [];                  // plants (M2) and creatures (M3) live here
+    this.entities = [];                  // plants
+    this.bugs = [];                      // creatures (M3)
 
     this.cells = [];
     for (let y = 0; y < this.rows; y++) {
@@ -33,6 +35,8 @@ export class World {
           x, y,
           water: cfg.WATER_START,
           nutrients: cfg.NUTRIENT_START,
+          detritus: 0,                   // dead matter waiting to rot (M3)
+          mould: 0,                      // the decomposer itself (M3)
         });
       }
     }
@@ -161,5 +165,6 @@ export class World {
 
     // life takes its turn
     tickPlants(this, dt);
+    tickCreatures(this, dt);
   }
 }

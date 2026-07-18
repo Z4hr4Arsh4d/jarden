@@ -27,7 +27,31 @@ export const CONFIG = {
   LAMP_SECONDS: 10,          // how long the sunlamp stays on
   LAMP_ADD: 0.55,            // extra light the lamp adds (works at night too)
 
+  // decay — dead things become detritus, which mould turns back into nutrients
+  DETRITUS_MAX: 2.0,
+  DECAY_SLOW: 0.004,         // detritus -> nutrients on its own, very slowly (no mould)
+  MOULD_EAT: 0.030,          // detritus -> nutrients per second, per unit of mould
+  MOULD_GROW: 0.20,          // how fast mould thickens where there's food
+  MOULD_SPREAD: 0.06,        // chance/sec a mouldy cell seeds a damp neighbour
+  MOULD_DECAY: 0.06,         // mould starves without detritus
+  MOULD_DAMP: 0.25,          // soil this wet or wetter can host mould
+
+  // bugs
+  MAX_BUGS: 10,
+  BUG_SPEED: 1.4,            // columns per second
+  BUG_METABOLISM: 0.022,     // energy burned per second
+  BUG_BITE: 0.045,           // plant health eaten per second (~22s to fell a healthy plant)
+  BUG_FEED: 0.100,           // energy gained per second while eating (net +0.078)
+  BUG_LEAVE_HEALTH: 0.30,    // bugs graze and move on — they never eat a plant to death
+  BUG_LIFE: 240,             // seconds
+  BUG_MATURITY: 25,          // seconds before it can breed
+  BUG_BREED_ENERGY: 0.85,    // energy needed to breed
+  BUG_BREED_COOLDOWN: 40,    // seconds between broods (stops instant population booms)
+  BUG_BREED_COST: 0.45,      // energy spent breeding
+  BUG_DETRITUS: 0.35,        // dead bug -> this much detritus
+
   // plants
+  PLANT_REGEN: 0.045,        // health recovered per second when fed and unbitten
   MAX_PLANTS: 16,            // one per column at most
   SEED_TIME: 2.0,            // seconds before a watered seed sprouts
   STARVE_TIME: 15.0,          // seconds without light/water before a plant withers

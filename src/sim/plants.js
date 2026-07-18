@@ -16,8 +16,8 @@ export function plantSeed(world, col, typeKey) {
   if (world.entities.some((p) => p.col === col && p.stage !== "wither")) return false;
   world.entities.push({
     id: nextId++, kind: "plant", type: typeKey, col,
-    stage: "seed", age: 0, progress: 0,
-    starve: 0, witherT: 0, seedT: 0, consumedN: 0,
+    stage: "seed", age: 0, progress: 0, health: 1,
+    starve: 0, witherT: 0, seedT: 0, consumedN: 0, bitten: 0,
   });
   return true;
 }
@@ -65,6 +65,7 @@ export function tickPlants(world, dt) {
     const roots = rootColumn(world, p.col);
     const light = world.lightAt(p.col, world.rows - cfg.SOIL_ROWS - 1);
     p.age += dt;
+    if (p.bitten > 0) p.bitten -= dt;
 
     if (p.stage === "wither") {
       p.witherT += dt;
@@ -107,6 +108,11 @@ export function tickPlants(world, dt) {
       soil.nutrients -= eat;
       p.consumedN += eat;
 
+      // heal from bug damage while it's fed and left alone
+      if (p.bitten <= 0 && p.health < 1) {
+        p.health = Math.min(1, p.health + cfg.PLANT_REGEN * dt);
+      }
+
       if (p.stage !== "mature") {
         p.progress += dt / (type.growDays * cfg.DAY_LENGTH * 0.5);   // half a growDay per stage
         if (p.progress >= 1) {
@@ -134,8 +140,10 @@ export function tickPlants(world, dt) {
   for (let i = world.entities.length - 1; i >= 0; i--) {
     const p = world.entities[i];
     if (p.kind === "plant" && p.stage === "wither" && p.witherT >= cfg.WITHER_TIME) {
+      // the body doesn't become food instantly — it becomes detritus for the
+      // decomposers to work on (M3). Mould turns this back into nutrients.
       const soil = rootCell(world, p.col);
-      soil.nutrients = Math.min(cfg.NUTRIENT_MAX, soil.nutrients + p.consumedN);
+      soil.detritus = Math.min(cfg.DETRITUS_MAX, soil.detritus + p.consumedN + 0.25);
       world.entities.splice(i, 1);
     }
   }

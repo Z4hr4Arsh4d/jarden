@@ -65,16 +65,14 @@ const run = (w, seconds) => { for (let t = 0; t < seconds; t += DT) w.tick(DT); 
   plantSeed(w, 8, "sprout");                        // short-lived on purpose
   w.addWater(8, 0.6);
   const id = w.entities[0].id;
-  let justBefore = null;
   let recycled = false;
   for (let t = 0; t < CONFIG.DAY_LENGTH * PLANT_TYPES.sprout.lifeDays * 2; t += DT) {
     const alive = w.entities.some((e) => e.id === id);
-    if (alive) justBefore = rootCell(w, 8).nutrients;
     w.tick(DT);
     if (alive && !w.entities.some((e) => e.id === id)) {
-      const after = rootCell(w, 8).nutrients;
-      console.log(`recycling: soil nutrients ${justBefore.toFixed(3)} -> ${after.toFixed(3)} at death`);
-      assert(after > justBefore, "death should feed the soil");
+      const d = rootCell(w, 8).detritus;
+      console.log(`recycling: death left ${d.toFixed(3)} detritus for the decomposers`);
+      assert(d > 0, "death should leave dead matter behind");
       recycled = true;
       break;
     }
