@@ -3,14 +3,22 @@ import JarCanvas from "./render/JarCanvas.jsx";
 import Sidebar from "./render/Sidebar.jsx";
 import Inspector from "./render/Inspector.jsx";
 import Account from "./render/Account.jsx";
+import Leaderboard from "./render/Leaderboard.jsx";
 import Tutorial, { STEPS } from "./render/Tutorial.jsx";
 import { World } from "./sim/engine.js";
 import { CONFIG } from "./sim/config.js";
 import { serialize, deserialize } from "./sim/serialize.js";
 import { audio } from "./render/audio.js";
+import { downloadCard } from "./render/share.js";
 import { auth, saveJar, loadJar, submitScore } from "./net/api.js";
 
 // The page's ambient colour, lerped from the jar's own sun. Dawn warms the room.
+const pill = (active) => ({
+  padding: "5px 12px", fontFamily: "inherit", fontSize: 10, cursor: "pointer",
+  borderRadius: 20, border: "1px solid var(--line)", background: "#fff",
+  color: active ? "var(--ink)" : "var(--muted)",
+});
+
 const NIGHT = [232, 236, 246], DAY = [255, 253, 245];
 const amb = (sun) => `rgb(${NIGHT.map((n, i) => Math.round(n + (DAY[i] - n) * sun)).join(",")})`;
 
@@ -27,6 +35,7 @@ export default function App() {
   const [sound, setSound] = useState(false);
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState("");
+  const [board, setBoard] = useState(false);
   const [, force] = useState(0);
 
   // the page background follows the jar's day
@@ -98,15 +107,15 @@ export default function App() {
         <p style={{ margin: "4px 0 0", fontSize: 11, color: "var(--muted)", letterSpacing: 0.4 }}>
           a sealed jar that lives, evolves and balances itself
         </p>
-        <button
-          onClick={() => { setSound(audio.toggle()); }}
-          style={{
-            marginTop: 9, padding: "4px 11px", fontFamily: "inherit", fontSize: 10,
-            cursor: "pointer", borderRadius: 20, border: "1px solid var(--line)",
-            background: "#fff", color: sound ? "var(--ink)" : "var(--muted)",
-          }}>
-          {sound ? "🔊 sound on" : "🔈 sound off"}
-        </button>
+        <div style={{ display: "flex", gap: 7, justifyContent: "center", marginTop: 10 }}>
+          <button onClick={() => setSound(audio.toggle())} style={pill(sound)}>
+            {sound ? "🔊 sound on" : "🔈 sound off"}
+          </button>
+          <button onClick={() => setBoard(true)} style={pill(false)}>🏆 leaderboard</button>
+          <button onClick={() => downloadCard(worldRef.current, auth.username)} style={pill(false)}>
+            📸 share card
+          </button>
+        </div>
       </header>
 
       <main style={{ display: "flex", gap: 20, alignItems: "flex-start", padding: "0 22px 40px", zIndex: 1 }}>
@@ -142,6 +151,8 @@ export default function App() {
           )}
         </div>
       </main>
+
+      <Leaderboard open={board} onClose={() => setBoard(false)} />
 
       {guiding && step < STEPS.length && (
         <Tutorial
