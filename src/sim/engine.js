@@ -27,6 +27,7 @@ export class World {
     this.humidity = 0;                   // water currently in the air (evaporated)
     this.lampT = 0;                      // sunlamp seconds remaining
     this._rand = mulberry32(cfg.SEED);
+    this.randCalls = 0;                  // counted so a save can restore the RNG's position
     // rand gets passed around as a value (to weather, genetics...), so bind it once
     // rather than leaving every call site to remember `this`.
     this.rand = this.rand.bind(this);
@@ -128,7 +129,7 @@ export class World {
     }
   }
 
-  rand() { return this._rand(); }
+  rand() { this.randCalls++; return this._rand(); }
 
   /** Total water in the system — cells + air. In a sealed jar this is conserved. */
   totalWater() {

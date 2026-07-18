@@ -4,6 +4,7 @@ import { CONFIG } from "../sim/config.js";
 import { plantSeed } from "../sim/plants.js";
 import { spawnBug, spawnPred } from "../sim/creatures.js";
 import { spend } from "../sim/score.js";
+import { audio } from "./audio.js";
 import { drawJar, colAt, pickAt, PIX_W, PIX_H, SCALE, JAR_X, JAR_Y, CELL } from "./drawJar.js";
 
 export default function JarCanvas({ world, tool, seedType, speed, onHover }) {
@@ -101,6 +102,8 @@ export default function JarCanvas({ world, tool, seedType, speed, onHover }) {
           else if (t === "bug") ok = spend(world, CONFIG.COST_BUG) && spawnBug(world, c);
           else if (t === "pred") ok = spend(world, CONFIG.COST_BUG) && spawnPred(world, c);
           else ok = spend(world, CONFIG.COST_SEED) && plantSeed(world, c, seedRef.current);
+
+          audio.sfx(ok ? (t === "seed" ? "plant" : t) : "deny");
 
           // a ripple where you clicked, so every tool *feels* like it did something
           ripplesRef.current.push({
